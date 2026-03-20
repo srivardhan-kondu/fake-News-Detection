@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Hybrid Fake News Detector{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">Responsible information verification</p>
+        <h1>Detect misleading news with a hybrid AI pipeline built for speed, traceability, and clarity.</h1>
+        <p class="hero-text">
+            Submit article text or a news URL, then review ML and DL outputs, credibility scoring, keyword evidence,
+            visual insights, and downloadable reports in one workflow.
+        </p>
+        <div class="hero-actions">
+            {% if current_user.is_authenticated %}
+                <a class="button button-primary" href="{{ url_for('main.dashboard') }}">Open dashboard</a>
+            {% else %}
+                <a class="button button-primary" href="{{ url_for('main.register') }}">Create account</a>
+                <a class="button button-secondary" href="{{ url_for('main.login') }}">Log in</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="hero-panel card glass-card">
+        <h2>Model Summary</h2>
+        <div class="metric-grid compact-grid">
+            <div class="metric-card accent-card">
+                <span>Dataset size</span>
+                <strong>{{ metrics.dataset_size }}</strong>
+            </div>
+            <div class="metric-card">
+                <span>Best ML F1</span>
+                <strong>{{ '%.2f'|format(metrics.performance.ml.f1_score * 100) }}%</strong>
+            </div>
+            <div class="metric-card">
+                <span>DL F1</span>
+                <strong>{{ '%.2f'|format(metrics.performance.dl.f1_score * 100) }}%</strong>
+            </div>
+            <div class="metric-card">
+                <span>Ensemble strategy</span>
+                <strong>{{ metrics.best_ml_model }} + {{ metrics.dl_model|upper }}</strong>
+            </div>
+        </div>
+
+        <h3 style="margin:18px 0 10px;font-size:0.95rem;">Trained Models</h3>
+        {% for d in metrics.model_details %}
+        <div style="background:var(--bg);border-radius:12px;padding:12px 14px;margin-bottom:8px; {% if d.is_best_ml %}border-left:3px solid var(--brand);{% endif %}">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
+                <strong style="font-size:0.88rem;">{{ d.display_name }}</strong>
+                <span style="font-size:0.65rem;text-transform:uppercase;color:var(--muted);font-weight:700;">{{ d.model_type }}</span>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;">
+                {% if d.metrics.accuracy is defined %}<span style="font-size:0.78rem;color:var(--muted);">Acc {{ '%.1f'|format(d.metrics.accuracy * 100) }}%</span>{% endif %}
+                {% if d.metrics.f1_score is defined %}<span style="font-size:0.78rem;color:var(--muted);">F1 {{ '%.1f'|format(d.metrics.f1_score * 100) }}%</span>{% endif %}
+                {% if d.metrics.precision is defined %}<span style="font-size:0.78rem;color:var(--muted);">Prec {{ '%.1f'|format(d.metrics.precision * 100) }}%</span>{% endif %}
+                {% if d.metrics.recall is defined %}<span style="font-size:0.78rem;color:var(--muted);">Rec {{ '%.1f'|format(d.metrics.recall * 100) }}%</span>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if metrics.decision_factors %}
+        <h3 style="margin:14px 0 6px;font-size:0.95rem;">Decision Factors</h3>
+        <p style="font-size:0.82rem;color:var(--muted);margin:0 0 4px;">{{ metrics.decision_factors.method }} — ML {{ '%.1f'|format(metrics.decision_factors.ml_weight * 100) }}% / DL {{ '%.1f'|format(metrics.decision_factors.dl_weight * 100) }}%</p>
+        <p style="font-size:0.78rem;color:var(--muted);margin:0;">{{ metrics.decision_factors.fallback_rule }}</p>
+        {% endif %}
+
+        <p class="panel-note">The system compares classical ML and BiLSTM performance, then weights both models for final classification reliability.</p>
+    </div>
+</section>
+
+<section class="feature-grid">
+    <article class="card feature-card">
+        <h3>Secure workflow</h3>
+        <p>Authenticated user sessions protect access to article analysis, history, and exports.</p>
+    </article>
+    <article class="card feature-card">
+        <h3>Hybrid prediction engine</h3>
+        <p>TF-IDF and classical ML are combined with a BiLSTM text model to capture lexical and contextual signals.</p>
+    </article>
+    <article class="card feature-card">
+        <h3>Explainable output</h3>
+        <p>Prediction confidence, credibility score, influential keywords, and model-level reasoning are surfaced with charts.</p>
+    </article>
+    <article class="card feature-card">
+        <h3>Actionable reports</h3>
+        <p>Each analysis is stored for later review and can be exported as PDF or CSV.</p>
+    </article>
+</section>
+{% endblock %}
