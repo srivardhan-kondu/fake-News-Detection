@@ -1,0 +1,48 @@
+{
+  "trained_at": "2026-03-20T13:12:52.034775",
+  "dataset_size": 15000,
+  "labels": {
+    "real": 0,
+    "fake": 1
+  },
+  "best_ml_model": "linear_svm",
+  "ml_models": {
+    "logistic_regression": {
+      "accuracy": 0.9256,
+      "precision": 0.9118,
+      "recall": 0.9424,
+      "f1_score": 0.9268
+    },
+    "linear_svm": {
+      "accuracy": 0.9312,
+      "precision": 0.9191,
+      "recall": 0.9456,
+      "f1_score": 0.9322
+    },
+    "naive_bayes": {
+      "accuracy": 0.8493,
+      "precision": 0.8322,
+      "recall": 0.8752,
+      "f1_score": 0.8531
+    }
+  },
+  "dl_model": "bilstm",
+  "performance": {
+    "ml": {
+      "accuracy": 0.9312,
+      "precision": 0.9191,
+      "recall": 0.9456,
+      "f1_score": 0.9322
+    },
+    "dl": {
+      "accuracy": 0.8845,
+      "precision": 0.8799,
+      "recall": 0.8907,
+      "f1_score": 0.8852
+    }
+  },
+  "ensemble_weights": {
+    "ml": 0.5129305601408606,
+    "dl": 0.48706943985913936
+  }
+}
