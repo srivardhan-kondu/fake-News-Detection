@@ -1,0 +1,26 @@
+*.pyc
+__pycache__/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.DS_Store
+instance/
+.env
+.flaskenv
+*.db
+.vscode/
+.idea/
+
+# Large data files
+app/data/sample_news.csv
+app/data/*.csv
+
+# Model artifacts (large)
+app/models_artifacts/*.keras
+app/models_artifacts/*.joblib
+
+# Reports
+reports/
