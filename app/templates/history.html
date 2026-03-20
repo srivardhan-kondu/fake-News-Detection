@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<section class="card history-page-card">
+    <div class="section-heading">
+        <div>
+            <p class="eyebrow">Audit trail</p>
+            <h1>Stored reports</h1>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="report-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Prediction</th>
+                    <th>Confidence</th>
+                    <th>Date</th>
+                    <th>Exports</th>
+                </tr>
+            </thead>
+            <tbody id="history-table-body">
+                <tr><td colspan="6" class="empty-table">Loading&hellip;</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
