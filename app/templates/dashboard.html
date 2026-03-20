@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Top two-column area: form + sidebar -->
+<section class="dashboard-grid">
+    <section class="card form-card">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Article analysis</p>
+                <h1>Verify a news story</h1>
+            </div>
+            <div class="tag">Authenticated session</div>
+        </div>
+        <form id="analyze-form" class="form-stack" novalidate>
+            <label>
+                <span>Headline</span>
+                <input class="input-field" name="title" placeholder="Optional headline">
+            </label>
+            <label>
+                <span>Article URL</span>
+                <input class="input-field" name="article_url" placeholder="https://example.com/news-story">
+                <small class="error-text" data-error="article_url"></small>
+            </label>
+            <label>
+                <span>Article text</span>
+                <textarea class="input-field textarea-field" name="article_text"
+                    placeholder="Paste the article content here if you are not using a URL."></textarea>
+                <small class="error-text" data-error="article_text"></small>
+            </label>
+            <button type="submit" class="button button-primary full-width">Analyze article</button>
+        </form>
+    </section>
+
+    <aside class="dashboard-side">
+        <section class="card side-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">History overview</p>
+                    <h2>Prediction distribution</h2>
+                </div>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="distribution-chart" class="chart-canvas"></canvas>
+            </div>
+        </section>
+
+        <section class="card side-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Stored reports</p>
+                    <h2>Recent analyses</h2>
+                </div>
+            </div>
+            <div id="history-list" class="history-list">
+                <p class="empty-state">Loading&hellip;</p>
+            </div>
+        </section>
+    </aside>
+</section>
+
+<!-- Full-width sections below -->
+<section id="metrics-section" class="metrics-stack"></section>
+<section id="result-section"></section>
+{% endblock %}
