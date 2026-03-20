@@ -16,11 +16,6 @@ instance/
 
 # Large data files
 app/data/sample_news.csv
-app/data/*.csv
-
-# Model artifacts (large)
-app/models_artifacts/*.keras
-app/models_artifacts/*.joblib
 
 # Reports
 reports/
