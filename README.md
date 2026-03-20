@@ -25,7 +25,7 @@
 13. [Performance Results](#13-performance-results)
 14. [Setup on macOS](#14-setup-on-macos)
 15. [Setup on Windows](#15-setup-on-windows)
-16. [Training the Models](#16-training-the-models)
+16. [Re-training the Models (Optional)](#16-re-training-the-models-optional)
 17. [Environment Variables](#17-environment-variables)
 18. [Functional Requirements Coverage](#18-functional-requirements-coverage)
 19. [Tech Stack Summary](#19-tech-stack-summary)
@@ -483,80 +483,39 @@ Trained on 15,000 stratified samples from WELFake. Test set: 3,750 samples.
 - Python 3.11 (install via [python.org](https://www.python.org/downloads/) or `brew install python@3.11`)
 - Git
 
-### Step-by-Step
+### Step-by-Step (3 commands to run)
 
 **1. Clone the repository**
 ```bash
-git clone <repository-url> "Fake News Detection"
-cd "Fake News Detection"
+git clone https://github.com/srivardhan-kondu/fake-News-Detection.git
+cd fake-News-Detection
 ```
 
-**2. Create and activate a virtual environment**
+**2. Create a virtual environment and install dependencies**
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-```
-
-**3. Install dependencies**
-```bash
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-> TensorFlow installation may take 2–5 minutes. If you are on Apple Silicon (M1/M2/M3), TensorFlow 2.15+ supports Metal GPU acceleration automatically.
+> TensorFlow installation may take 2–5 minutes. On Apple Silicon (M1/M2/M3), TensorFlow 2.15+ supports Metal GPU acceleration automatically.
 
-**4. Obtain the WELFake dataset**
-
-Download from Kaggle: [saurabhshahane/fake-news-classification](https://www.kaggle.com/datasets/saurabhshahane/fake-news-classification)
-
-Place the CSV file at:
-```
-app/data/sample_news.csv
-```
-
-The CSV must have at minimum these columns: `text`, `label` (0 = Real, 1 = Fake).
-
-**5. Set environment variables (optional but recommended for production)**
-```bash
-export SECRET_KEY="your-secure-random-string"
-export FLASK_DEBUG=0
-```
-
-Or create a `.env` file in the project root:
-```
-SECRET_KEY=your-secure-random-string
-FLASK_DEBUG=0
-```
-
-**6. Run the application**
+**3. Run the application**
 ```bash
 python run.py
 ```
 
-The first run will automatically:
-- Create the SQLite database at `instance/fake_news.db`
-- Train all models on the dataset (takes ~5–15 minutes depending on hardware)
-- Save trained artifacts to `app/models_artifacts/`
+That's it! The app starts immediately — all pre-trained model artifacts are included in the repository. No dataset download or model training required.
 
-Subsequent startups load all models from disk in seconds.
+The first run will also create the SQLite database at `instance/fake_news.db`.
 
-**7. Open in browser**
+**4. Open in browser**
 ```
 http://127.0.0.1:5001
 ```
 
-Register an account, then navigate to the Dashboard to start analysing articles.
-
----
-
-### Re-train models from scratch
-
-```bash
-source .venv/bin/activate
-python scripts/train_models.py
-```
-
-This overwrites all artifacts in `app/models_artifacts/`.
+Register a new account, log in, and start analysing articles from the Dashboard.
 
 ---
 
@@ -567,20 +526,21 @@ This overwrites all artifacts in `app/models_artifacts/`.
 - Python 3.11 — download from [python.org](https://www.python.org/downloads/windows/)
   - During install, tick **"Add Python to PATH"** and **"pip"**
 - Git — download from [git-scm.com](https://git-scm.com/downloads)
-- (Recommended) Windows Terminal or PowerShell 7+
 
-### Step-by-Step
+### Step-by-Step (3 commands to run)
 
-**1. Open PowerShell as a standard user and clone the repository**
+**1. Open PowerShell and clone the repository**
 ```powershell
-git clone <repository-url> "Fake News Detection"
-cd "Fake News Detection"
+git clone https://github.com/srivardhan-kondu/fake-News-Detection.git
+cd fake-News-Detection
 ```
 
-**2. Create and activate a virtual environment**
+**2. Create a virtual environment and install dependencies**
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
 > If you receive an error `cannot be loaded because running scripts is disabled`, run this once:
@@ -589,57 +549,21 @@ python -m venv .venv
 > ```
 > Then activate again.
 
-**3. Upgrade pip and install dependencies**
-```powershell
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
+> **TensorFlow on Windows:** If you see DLL-related errors, install the [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
 
-> **TensorFlow on Windows:** TensorFlow 2.15+ requires the **Microsoft Visual C++ Redistributable** (usually already installed). If you see DLL-related errors, download and install it from [Microsoft](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
-
-**4. Obtain the WELFake dataset**
-
-Download from Kaggle: [saurabhshahane/fake-news-classification](https://www.kaggle.com/datasets/saurabhshahane/fake-news-classification)
-
-Place the CSV at:
-```
-app\data\sample_news.csv
-```
-
-**5. Set environment variables (optional)**
-
-In PowerShell for the current session:
-```powershell
-$env:SECRET_KEY = "your-secure-random-string"
-$env:FLASK_DEBUG = "0"
-```
-
-Or create a `.env` file in the project root:
-```
-SECRET_KEY=your-secure-random-string
-FLASK_DEBUG=0
-```
-
-**6. Run the application**
+**3. Run the application**
 ```powershell
 python run.py
 ```
 
-The first run trains all models automatically (5–15 minutes).
+That's it! All pre-trained models are included — no dataset download or training needed.
 
-**7. Open in browser**
+**4. Open in browser**
 ```
 http://127.0.0.1:5001
 ```
 
----
-
-### Re-train models from scratch (Windows)
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python scripts\train_models.py
-```
+Register a new account, log in, and start analysing articles from the Dashboard.
 
 ---
 
@@ -655,14 +579,25 @@ python scripts\train_models.py
 
 ---
 
-## 16. Training the Models
+## 16. Re-training the Models (Optional)
 
-### Automatic (on first server start)
-When `run.py` is executed and no model artifacts exist, `bootstrap.py` calls `train_models()` automatically. This is the recommended approach for new setups.
+The repository ships with **pre-trained models** — you do NOT need to retrain to use the app. Only follow these steps if you want to retrain on a different dataset or from scratch.
 
-### Manual via training script
+### Step 1 — Get the dataset
+
+Download the WELFake dataset from Kaggle: [saurabhshahane/fake-news-classification](https://www.kaggle.com/datasets/saurabhshahane/fake-news-classification)
+
+Place the CSV file at:
+```
+app/data/sample_news.csv
+```
+
+The CSV must have columns: `text` and `label` (0 = Real, 1 = Fake).
+
+### Step 2 — Run the training script
+
 ```bash
-# macOS/Linux
+# macOS / Linux
 source .venv/bin/activate
 python scripts/train_models.py
 
@@ -670,6 +605,8 @@ python scripts/train_models.py
 .\.venv\Scripts\Activate.ps1
 python scripts\train_models.py
 ```
+
+Training takes ~5–15 minutes depending on hardware. This overwrites all files in `app/models_artifacts/`.
 
 ### What training does
 1. Loads `app/data/sample_news.csv`
@@ -684,7 +621,7 @@ python scripts\train_models.py
 10. Computes F1-proportional ensemble weights
 11. Saves all artifacts to `app/models_artifacts/`
 
-Training artifacts produced:
+### Artifacts produced
 ```
 app/models_artifacts/
   vectorizer.joblib       ← TF-IDF fitted transformer
@@ -761,47 +698,3 @@ app/models_artifacts/
 ---
 
 *Built as an end-to-end demonstration of hybrid NLP classification with full transparency, reproducibility, and production-ready authentication.*
-
-This project is a full-stack Flask application for detecting fake news with a hybrid machine learning and deep learning pipeline. It supports secure authentication, article submission by text or URL, automated scraping, NLP preprocessing, explainable predictions, visual analytics, and report export.
-
-## Features
-
-- Secure registration, login, logout, and authenticated sessions
-- Manual article submission and URL-based article extraction
-- Consistent NLP preprocessing with normalization, stop-word removal, punctuation cleanup, and duplicate token reduction
-- Hybrid prediction flow using TF-IDF + classical ML and BiLSTM deep learning
-- Prediction confidence, credibility scoring, influential keyword explanations, and model comparison
-- Visual dashboards for word frequencies and prediction history
-- PDF and CSV export for generated reports
-- SQLite persistence for users and analyzed articles
-
-## Project Structure
-
-- `app/`: Flask application package
-- `app/services/`: scraping, preprocessing, training, reporting, and bootstrap services
-- `app/data/sample_news.csv`: bundled labeled dataset for initial model training
-- `app/models_artifacts/`: generated model files
-- `reports/`: exported reports
-- `scripts/`: utility scripts
-
-## Setup
-
-1. Create and activate a Python virtual environment.
-2. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Start the application:
-
-   ```bash
-   python run.py
-   ```
-
-4. Open the local Flask URL shown in the terminal.
-
-## Notes
-
-- On first launch, the application initializes the SQLite database and trains the bundled ML and DL models if artifacts are missing.
-- Submitted articles are stored and can be reused for future retraining workflows.
