@@ -44,5 +44,11 @@
   "ensemble_weights": {
     "ml": 0.5129305601408606,
     "dl": 0.48706943985913936
+  },
+  "per_model_weights": {
+    "logistic_regression": 0.2576,
+    "linear_svm": 0.2591,
+    "naive_bayes": 0.2371,
+    "bilstm": 0.2460
   }
 }

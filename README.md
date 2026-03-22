@@ -94,11 +94,11 @@ Browser ──POST /api/analyze──► Flask route
     └─► Run LR → probability_lr
     └─► Run SVM → probability_svm  (via Platt scaling on decision_function)
     └─► Run NB  → probability_nb
-    └─► Select best_ml result by F1; extract influential TF-IDF terms
+    └─► Select best_ml result by F1; extract fake- and real-supporting TF-IDF terms
     └─► Tokenizer → pad sequences (maxlen=150)
     └─► BiLSTM.predict → probability_dl
-    └─► Ensemble: |p_ml - p_dl| > 0.35 → best F1 model wins
-                  else → weighted blend (F1-proportional weights)
+    └─► Ensemble: max gap among all 4 models > 0.35 → best F1 model wins
+                  else → weighted blend (per-model F1-proportional weights)
     └─► Compute confidence, credibility
     └─► Save Submission to DB
     └─► Return JSON 201 with full transparency payload
@@ -328,28 +328,38 @@ $$h_t = o_t \cdot \tanh(C_t) \quad \text{(hidden state)}$$
 
 ## 8. Hybrid Ensemble Decision Layer
 
-After all four models produce individual probabilities, the system applies a two-stage decision rule:
+After all four models produce individual probabilities, the system applies a **full 4-model weighted ensemble** with a disagreement fallback.
 
-### Stage 1 — Weighted Ensemble Blend
+### Stage 1 — Per-Model Weighted Ensemble (All 4 Models)
 
-Weights are computed **automatically at training time** proportional to each group's F1 score on the held-out test set:
+Weights are computed **automatically at training time** proportional to each model's individual F1 score on the held-out test set:
 
-$$w_{ML} = \frac{F1_{ML}}{F1_{ML} + F1_{DL}}, \quad w_{DL} = \frac{F1_{DL}}{F1_{ML} + F1_{DL}}$$
+$$w_i = \frac{F1_i}{\sum_{j=1}^{4} F1_j}$$
 
-$$P_{hybrid} = w_{ML} \cdot P_{best\_ML} + w_{DL} \cdot P_{DL}$$
+The final ensemble probability is the weighted sum across **all four models**:
 
-*Example from training:* ML F1=93.22%, DL F1=88.52%  
-→ $w_{ML}=0.513$, $w_{DL}=0.487$
+$$P_{ensemble} = w_{LR} \cdot P_{LR} + w_{SVM} \cdot P_{SVM} + w_{NB} \cdot P_{NB} + w_{BiLSTM} \cdot P_{BiLSTM}$$
+
+*Current per-model weights (from training):*
+
+| Model | F1 Score | Ensemble Weight |
+|---|---|---|
+| Logistic Regression | 92.68% | 25.76% |
+| Linear SVM | 93.22% | 25.91% |
+| Multinomial Naive Bayes | 85.31% | 23.71% |
+| Bidirectional LSTM | 88.52% | 24.60% |
+
+Every model contributes to the final prediction — no single model dominates.
 
 ### Stage 2 — Disagreement Fallback
 
-If the ML and DL branches disagree strongly, the blend would average out conflicting signals and produce an unreliable middle value. The system detects this and overrides:
+If the models disagree strongly, the blend would average out conflicting signals and produce an unreliable middle value. The system detects this by computing the maximum probability gap across all 4 models:
 
-$$\text{gap} = \left| P_{best\_ML} - P_{DL} \right|$$
+$$\text{gap} = \max(P_1, P_2, P_3, P_4) - \min(P_1, P_2, P_3, P_4)$$
 
-$$\text{strategy} = \begin{cases} \text{best performing model (by F1)} & \text{if gap} > 0.35 \\ P_{hybrid} & \text{otherwise} \end{cases}$$
+$$\text{strategy} = \begin{cases} \text{best performing model (by F1)} & \text{if gap} > 0.35 \\ P_{ensemble} & \text{otherwise} \end{cases}$$
 
-**When gap > 35%:** The single model with the higher training F1 score is used exclusively. This avoids averaging a strong signal (e.g., 90% fake) with a weak one (e.g., 40% fake) into an ambiguous 65%.
+**When gap > 35%:** The single model with the highest training F1 score is used exclusively. This avoids averaging a strong signal (e.g., 90% fake) with a weak one (e.g., 40% fake) into an ambiguous 65%.
 
 ### Final classification
 
@@ -365,9 +375,27 @@ For every ML model that exposes `coef_` (Logistic Regression and Linear SVM), th
 
 $$\text{contribution}(t) = \text{TF-IDF}(t, \mathbf{x}) \times w_t$$
 
-Where $w_t$ is the model's learned weight for term $t$ and `TF-IDF(t, x)` is the feature value in the current document. Terms are ranked by their contribution in the direction of the final prediction (highest positive contributions for Fake News predictions, lowest negative for Real News).
+Where $w_t$ is the model's learned weight for term $t$ and `TF-IDF(t, x)` is the feature value in the current document.
 
-The **top 6 terms** are surfaced in the UI as influential keywords. These terms are derived from the **best ML model's** coefficient vector.
+### Split Fake vs Real Keywords
+
+Terms are separated into two groups based on their contribution direction:
+
+- **Fake-supporting terms** (positive contribution): Words where `TF-IDF × coefficient > 0`, pushing the prediction toward Fake News (label 1). The top 6 are displayed.
+- **Real-supporting terms** (negative contribution): Words where `TF-IDF × coefficient < 0`, pushing the prediction toward Real News (label 0). The top 6 are displayed.
+
+The UI displays these in two clearly labeled sections with color-coded chips:
+- Red chips for fake-supporting keywords
+- Green chips for real-supporting keywords
+
+These terms are derived from the **best ML model's** (Linear SVM) coefficient vector. The explainable insights section additionally describes:
+- Which ensemble strategy was used and why
+- Each model's individual weight and probability estimate
+- Which specific keywords pushed toward fake vs real
+
+This satisfies **FR21** (highlight influential keywords) and **FR22** (explainable classification insights).
+
+**Code location:** `app/services/ml_pipeline.py` — `_predict_all_ml()` method
 
 ---
 
@@ -409,7 +437,7 @@ This is a human-readable score: high value = high credibility (closer to Real Ne
 | `predicted_label` | VARCHAR(30) | `"Fake News"` or `"Real News"` |
 | `confidence_score` | FLOAT | 50–100% |
 | `credibility_score` | FLOAT | 0–100% |
-| `explanation_json` | TEXT | `{influential_terms, insights}` |
+| `explanation_json` | TEXT | `{influential_terms, fake_supporting_terms, real_supporting_terms, insights}` |
 | `chart_json` | TEXT | `{word_frequency}` |
 | `model_breakdown_json` | TEXT | Full per-model predictions |
 | `report_summary` | TEXT | Human-readable summary |
@@ -438,18 +466,26 @@ All JSON API endpoints require an authenticated session (login first).
   "confidence_score": 87.3,
   "credibility_score": 12.7,
   "explanation": {
-    "influential_terms": ["claim", "allegedly", "sources say"],
-    "insights": ["Final classification used the hybrid ensemble strategy.", "..."]
+    "influential_terms": ["claim", "allegedly", "sources say", "reuters", "official", "government"],
+    "fake_supporting_terms": ["claim", "allegedly", "sources say"],
+    "real_supporting_terms": ["reuters", "official", "government"],
+    "insights": [
+      "Final classification used the weighted ensemble (all 4 models) strategy.",
+      "All models agreed closely (gap 13.2%). A weighted ensemble of all 4 models was used: Logistic Regression 0.26, Linear Svm 0.26, Naive Bayes 0.24, BiLSTM 0.25.",
+      "Top words pushing toward Fake: claim, allegedly, sources say.",
+      "Top words pushing toward Real: reuters, official, government."
+    ]
   },
   "model_breakdown": {
-    "selected_strategy": "hybrid ensemble",
-    "decision_reason": "ML and DL agreed closely (gap 8.2%). A weighted ensemble was used...",
+    "selected_strategy": "weighted ensemble (all 4 models)",
+    "decision_reason": "All models agreed closely (gap 13.2%). A weighted ensemble of all 4 models was used...",
     "ensemble_weights": {"ml": 0.513, "dl": 0.487},
+    "per_model_weights": {"logistic_regression": 0.2576, "linear_svm": 0.2591, "naive_bayes": 0.2371, "bilstm": 0.246},
     "individual_predictions": [
-      {"model_name": "Logistic Regression", "model_type": "ML", "probability_fake": 85.1, "prediction": "Fake News", "is_best_ml": false, "f1_score": 0.9268, "accuracy": 0.9256},
-      {"model_name": "Linear Svm", "model_type": "ML", "probability_fake": 89.4, "prediction": "Fake News", "is_best_ml": true, "f1_score": 0.9322, "accuracy": 0.9312},
-      {"model_name": "Naive Bayes", "model_type": "ML", "probability_fake": 76.2, "prediction": "Fake News", "is_best_ml": false, "f1_score": 0.8531, "accuracy": 0.8493},
-      {"model_name": "BiLSTM (Deep Learning)", "model_type": "DL", "probability_fake": 81.1, "prediction": "Fake News", "is_best_ml": false, "f1_score": 0.8852, "accuracy": 0.8845}
+      {"model_name": "Logistic Regression", "model_type": "ML", "probability_fake": 85.1, "prediction": "Fake News", "is_best_ml": false, "f1_score": 0.9268, "accuracy": 0.9256, "ensemble_weight": 0.2576},
+      {"model_name": "Linear Svm", "model_type": "ML", "probability_fake": 89.4, "prediction": "Fake News", "is_best_ml": true, "f1_score": 0.9322, "accuracy": 0.9312, "ensemble_weight": 0.2591},
+      {"model_name": "Naive Bayes", "model_type": "ML", "probability_fake": 76.2, "prediction": "Fake News", "is_best_ml": false, "f1_score": 0.8531, "accuracy": 0.8493, "ensemble_weight": 0.2371},
+      {"model_name": "BiLSTM (Deep Learning)", "model_type": "DL", "probability_fake": 81.1, "prediction": "Fake News", "is_best_ml": false, "f1_score": 0.8852, "accuracy": 0.8845, "ensemble_weight": 0.246}
     ],
     "ml_probability_fake": 89.4,
     "dl_probability_fake": 81.1,
@@ -618,7 +654,7 @@ Training takes ~5–15 minutes depending on hardware. This overwrites all files 
 7. Trains Logistic Regression, LinearSVC, MultinomialNB in sequence
 8. Trains Bidirectional LSTM (up to 5 epochs with EarlyStopping)
 9. Evaluates all models on the held-out test set
-10. Computes F1-proportional ensemble weights
+10. Computes per-model F1-proportional ensemble weights (all 4 models)
 11. Saves all artifacts to `app/models_artifacts/`
 
 ### Artifacts produced
@@ -658,21 +694,23 @@ app/models_artifacts/
 | FR9 | Linear SVM classification | ✅ LinearSVC + Platt scaling |
 | FR10 | Bidirectional LSTM classification | ✅ TensorFlow/Keras |
 | FR11 | Naive Bayes classification | ✅ MultinomialNB |
-| FR12 | Hybrid ensemble prediction | ✅ F1-weighted blend + gap fallback |
-| FR13 | Per-model transparency panel | ✅ All 4 models shown with probability bars |
+| FR12 | Hybrid ensemble prediction (all 4 models) | ✅ F1-weighted blend of LR + SVM + NB + BiLSTM + gap fallback |
+| FR13 | Per-model transparency panel | ✅ All 4 models shown with probability bars + ensemble weight |
 | FR14 | Confidence score | ✅ `max(p, 1-p) × 100` |
 | FR15 | Credibility score | ✅ `(1 - p) × 100` |
-| FR16 | Influential keyword extraction | ✅ TF-IDF × model coefficient |
-| FR17 | Explainable decision rationale | ✅ Strategy + gap + weight text |
+| FR16 | Influential keyword extraction | ✅ TF-IDF × model coefficient, split into fake- and real-supporting |
+| FR17 | Explainable decision rationale | ✅ Strategy + gap + per-model weight text |
 | FR18 | Word frequency bar chart | ✅ Chart.js |
 | FR19 | Model comparison bar chart | ✅ All models + hybrid |
 | FR20 | Prediction distribution doughnut chart | ✅ Real vs Fake over history |
-| FR21 | Analysis history per user | ✅ Submission model + `/api/history` |
-| FR22 | PDF report export | ✅ ReportLab |
-| FR23 | CSV report export | ✅ stdlib csv |
-| FR24 | Model metrics displayed | ✅ Accuracy, Precision, Recall, F1 per model |
-| FR25 | Responsive design | ✅ 3 breakpoints: 1024 / 768 / 480px |
-| FR26 | Model hyperparameters & architecture UI | ✅ Full pipeline panel on dashboard |
+| FR21 | Highlight influential keywords/phrases contributing to prediction | ✅ Fake-supporting (red) and real-supporting (green) keyword chips |
+| FR22 | Explainable insights into how the system determined classification | ✅ Per-model weights, probabilities, decision strategy, and keyword direction |
+| FR23 | Analysis history per user | ✅ Submission model + `/api/history` |
+| FR24 | PDF report export | ✅ ReportLab, includes split fake/real keywords |
+| FR25 | CSV report export | ✅ stdlib csv, includes split fake/real keywords |
+| FR26 | Model metrics displayed | ✅ Accuracy, Precision, Recall, F1 per model |
+| FR27 | Responsive design | ✅ 3 breakpoints: 1024 / 768 / 480px |
+| FR28 | Model hyperparameters & architecture UI | ✅ Full pipeline panel on dashboard |
 
 ---
 

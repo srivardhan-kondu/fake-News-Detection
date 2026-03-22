@@ -150,6 +150,12 @@ class HybridFakeNewsService:
         dl_predictions = (dl_probabilities >= 0.5).astype(int)
         dl_results = self._compute_metrics(y_test, dl_predictions)
 
+        # Compute per-model F1 weights for full 4-model ensemble
+        all_f1 = {name: ml_results[name]["f1_score"] for name in ml_results}
+        all_f1["bilstm"] = dl_results["f1_score"]
+        total_f1 = max(sum(all_f1.values()), 0.001)
+        per_model_weights = {name: f1 / total_f1 for name, f1 in all_f1.items()}
+
         ml_f1 = ml_results[best_ml_name]["f1_score"]
         dl_f1 = dl_results["f1_score"]
         total_weight = max(ml_f1 + dl_f1, 0.001)
@@ -168,6 +174,7 @@ class HybridFakeNewsService:
                 "ml": ml_f1 / total_weight,
                 "dl": dl_f1 / total_weight,
             },
+            "per_model_weights": per_model_weights,
         }
 
         joblib.dump(vectorizer, self.artifact_dir / "vectorizer.joblib")
@@ -271,11 +278,13 @@ class HybridFakeNewsService:
 
         # --- Ensemble decision factors ---
         weights = meta.get("ensemble_weights", {})
+        per_model_w = meta.get("per_model_weights", {})
         decision_factors = {
-            "method": "F1-weighted ensemble blending",
+            "method": "F1-weighted ensemble blending (all 4 models)",
             "ml_weight": round(weights.get("ml", 0), 4),
             "dl_weight": round(weights.get("dl", 0), 4),
-            "fallback_rule": "If ML–DL probability gap > 35%, the system selects the single best-performing model (by F1) instead of blending.",
+            "per_model_weights": {k: round(v, 4) for k, v in per_model_w.items()},
+            "fallback_rule": "If the max probability gap among all 4 models > 35%, the system selects the single best-performing model (by F1) instead of blending.",
             "best_model_selection": "The ML model with the highest F1 score on the held-out test set is designated best_ml_model.",
         }
 
@@ -298,31 +307,49 @@ class HybridFakeNewsService:
         best_ml_name = metadata["best_ml_model"]
         ml_result = all_ml_results[best_ml_name]
 
-        hybrid_probability = (weights["ml"] * ml_result["probability"]) + (weights["dl"] * dl_result["probability"])
-        probability_gap = abs(ml_result["probability"] - dl_result["probability"])
+        # --- Full 4-model weighted ensemble ---
+        per_model_weights = metadata.get("per_model_weights", {})
+        if per_model_weights:
+            weighted_sum = 0.0
+            for name, res in all_ml_results.items():
+                w = per_model_weights.get(name, 0)
+                weighted_sum += w * res["probability"]
+            weighted_sum += per_model_weights.get("bilstm", 0) * dl_result["probability"]
+            hybrid_probability = weighted_sum
+        else:
+            hybrid_probability = (weights["ml"] * ml_result["probability"]) + (weights["dl"] * dl_result["probability"])
+
+        # Compute min/max individual probability to detect large disagreement
+        all_probs = [res["probability"] for res in all_ml_results.values()] + [dl_result["probability"]]
+        probability_gap = max(all_probs) - min(all_probs)
         use_best_model = probability_gap > 0.35
 
         if use_best_model:
             if metadata["performance"]["ml"]["f1_score"] >= metadata["performance"]["dl"]["f1_score"]:
                 final_probability = ml_result["probability"]
                 selected_strategy = f"best performing model: {best_ml_name}"
-                decision_reason = (f"ML and DL disagreed significantly (gap {probability_gap*100:.1f}%). "
+                decision_reason = (f"Models disagreed significantly (gap {probability_gap*100:.1f}%). "
                                    f"The best ML model ({best_ml_name}) was selected based on higher F1 score.")
             else:
                 final_probability = dl_result["probability"]
                 selected_strategy = "best performing model: bilstm"
-                decision_reason = (f"ML and DL disagreed significantly (gap {probability_gap*100:.1f}%). "
+                decision_reason = (f"Models disagreed significantly (gap {probability_gap*100:.1f}%). "
                                    f"The BiLSTM deep learning model was selected based on higher F1 score.")
         else:
             final_probability = hybrid_probability
-            selected_strategy = "hybrid ensemble"
-            decision_reason = (f"ML and DL agreed closely (gap {probability_gap*100:.1f}%). "
-                               f"A weighted ensemble was used: ML weight {weights['ml']:.2f}, DL weight {weights['dl']:.2f}.")
+            selected_strategy = "weighted ensemble (all 4 models)"
+            weight_parts = [f"{n.replace('_', ' ').title()} {per_model_weights.get(n, 0):.2f}" for n in all_ml_results]
+            weight_parts.append(f"BiLSTM {per_model_weights.get('bilstm', 0):.2f}")
+            decision_reason = (f"All models agreed closely (gap {probability_gap*100:.1f}%). "
+                               f"A weighted ensemble of all 4 models was used: {', '.join(weight_parts)}.")
 
         predicted_label = "Fake News" if final_probability >= 0.5 else "Real News"
         confidence_score = round(max(final_probability, 1 - final_probability) * 100, 2)
         credibility_score = round((1 - final_probability) * 100, 2)
-        influential_terms = ml_result["influential_terms"]
+
+        # --- Explainability: split terms into fake-supporting vs real-supporting ---
+        fake_supporting_terms = ml_result["fake_supporting_terms"]
+        real_supporting_terms = ml_result["real_supporting_terms"]
 
         # Build per-model individual predictions for transparency
         individual_predictions = []
@@ -338,6 +365,7 @@ class HybridFakeNewsService:
                 "is_best_ml": name == best_ml_name,
                 "f1_score": trained_metrics.get("f1_score", 0),
                 "accuracy": trained_metrics.get("accuracy", 0),
+                "ensemble_weight": round(per_model_weights.get(name, 0), 4),
             })
 
         dl_prob = dl_result["probability"]
@@ -350,16 +378,23 @@ class HybridFakeNewsService:
             "is_best_ml": False,
             "f1_score": metadata["performance"]["dl"].get("f1_score", 0),
             "accuracy": metadata["performance"]["dl"].get("accuracy", 0),
+            "ensemble_weight": round(per_model_weights.get("bilstm", 0), 4),
         })
 
         insights = [
             f"Final classification used the {selected_strategy} strategy.",
             decision_reason,
-            f"The best ML model ({best_ml_name.replace('_', ' ').title()}) estimated {ml_result['probability']*100:.2f}% fake probability.",
-            f"The BiLSTM deep learning model estimated {dl_prob*100:.2f}% fake probability.",
-            f"The hybrid ensemble probability was {hybrid_probability*100:.2f}%.",
-            "Influential keywords are derived from the strongest TF-IDF feature contributions.",
         ]
+        for name, res in all_ml_results.items():
+            w = per_model_weights.get(name, 0)
+            insights.append(f"{name.replace('_', ' ').title()} (weight {w:.2f}) estimated {res['probability']*100:.2f}% fake probability.")
+        insights.extend([
+            f"BiLSTM (weight {per_model_weights.get('bilstm', 0):.2f}) estimated {dl_prob*100:.2f}% fake probability.",
+            f"The weighted ensemble probability was {hybrid_probability*100:.2f}%.",
+            "Influential keywords are derived from TF-IDF × model coefficient contributions.",
+            f"Top words pushing toward Fake: {', '.join(fake_supporting_terms) if fake_supporting_terms else 'none identified'}.",
+            f"Top words pushing toward Real: {', '.join(real_supporting_terms) if real_supporting_terms else 'none identified'}.",
+        ])
 
         return {
             "title": title,
@@ -368,7 +403,9 @@ class HybridFakeNewsService:
             "confidence_score": confidence_score,
             "credibility_score": credibility_score,
             "explanation": {
-                "influential_terms": influential_terms,
+                "influential_terms": fake_supporting_terms + real_supporting_terms,
+                "fake_supporting_terms": fake_supporting_terms,
+                "real_supporting_terms": real_supporting_terms,
                 "insights": insights,
             },
             "charts": {
@@ -378,6 +415,7 @@ class HybridFakeNewsService:
                 "selected_strategy": selected_strategy,
                 "decision_reason": decision_reason,
                 "ensemble_weights": weights,
+                "per_model_weights": per_model_weights,
                 "ml_model": ml_result["model_name"],
                 "ml_probability_fake": round(ml_result["probability"] * 100, 2),
                 "dl_probability_fake": round(dl_prob * 100, 2),
@@ -389,7 +427,7 @@ class HybridFakeNewsService:
         }
 
     def _predict_all_ml(self, processed_text: str) -> dict:
-        """Run every ML model and return per-model results."""
+        """Run every ML model and return per-model results with split fake/real terms."""
         self._load_artifacts()
         vectorizer = self._vectorizer
         models = self._ml_models
@@ -405,21 +443,27 @@ class HybridFakeNewsService:
                 margin = float(model.decision_function(features)[0])
                 probability = 1 / (1 + math.exp(-margin))
 
-            influential_terms = []
+            fake_supporting_terms = []
+            real_supporting_terms = []
             if hasattr(model, "coef_"):
                 contribution_values = []
-                weights = model.coef_[0]
+                coef_weights = model.coef_[0]
                 feature_values = features.toarray()[0]
                 for index in non_zero_indices:
-                    contribution_values.append((feature_names[index], feature_values[index] * weights[index]))
-                reverse = probability >= 0.5
-                ranked = sorted(contribution_values, key=lambda item: item[1], reverse=reverse)
-                influential_terms = [term for term, _ in ranked[:6]]
+                    contribution_values.append((feature_names[index], feature_values[index] * coef_weights[index]))
+                # Positive contributions push toward fake (label 1)
+                sorted_by_score = sorted(contribution_values, key=lambda item: item[1], reverse=True)
+                fake_supporting_terms = [term for term, score in sorted_by_score if score > 0][:6]
+                # Negative contributions push toward real (label 0)
+                sorted_by_score_asc = sorted(contribution_values, key=lambda item: item[1])
+                real_supporting_terms = [term for term, score in sorted_by_score_asc if score < 0][:6]
 
             results[name] = {
                 "model_name": name,
                 "probability": probability,
-                "influential_terms": influential_terms,
+                "fake_supporting_terms": fake_supporting_terms,
+                "real_supporting_terms": real_supporting_terms,
+                "influential_terms": fake_supporting_terms + real_supporting_terms,
             }
         return results
 
@@ -439,21 +483,25 @@ class HybridFakeNewsService:
 
         feature_names = np.array(vectorizer.get_feature_names_out())
         non_zero_indices = features.nonzero()[1]
-        influential_terms = []
+        fake_supporting_terms = []
+        real_supporting_terms = []
         if hasattr(model, "coef_"):
             contribution_values = []
-            weights = model.coef_[0]
+            coef_weights = model.coef_[0]
             feature_values = features.toarray()[0]
             for index in non_zero_indices:
-                contribution_values.append((feature_names[index], feature_values[index] * weights[index]))
-            reverse = probability >= 0.5
-            ranked = sorted(contribution_values, key=lambda item: item[1], reverse=reverse)
-            influential_terms = [term for term, _ in ranked[:6]]
+                contribution_values.append((feature_names[index], feature_values[index] * coef_weights[index]))
+            sorted_desc = sorted(contribution_values, key=lambda item: item[1], reverse=True)
+            fake_supporting_terms = [term for term, score in sorted_desc if score > 0][:6]
+            sorted_asc = sorted(contribution_values, key=lambda item: item[1])
+            real_supporting_terms = [term for term, score in sorted_asc if score < 0][:6]
 
         return {
             "model_name": best_ml_name,
             "probability": probability,
-            "influential_terms": influential_terms,
+            "fake_supporting_terms": fake_supporting_terms,
+            "real_supporting_terms": real_supporting_terms,
+            "influential_terms": fake_supporting_terms + real_supporting_terms,
         }
 
     def _predict_dl(self, processed_text: str) -> dict:

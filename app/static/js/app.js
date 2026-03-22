@@ -278,16 +278,19 @@ function initDashboard() {
                         <table class="param-table">
                             <tbody>
                                 <tr><td class="param-key">Method</td><td class="param-val">${esc(df.method || '')}</td></tr>
-                                <tr><td class="param-key">ML weight</td><td class="param-val">${df.ml_weight != null ? (df.ml_weight * 100).toFixed(2) + '%' : '—'}</td></tr>
-                                <tr><td class="param-key">DL weight</td><td class="param-val">${df.dl_weight != null ? (df.dl_weight * 100).toFixed(2) + '%' : '—'}</td></tr>
+                                ${Object.entries(df.per_model_weights || {}).map(([name, w]) =>
+                                    `<tr><td class="param-key">${esc(name.replace(/_/g, ' '))} weight</td><td class="param-val">${(w * 100).toFixed(2)}%</td></tr>`
+                                ).join('')}
                                 <tr><td class="param-key">Fallback rule</td><td class="param-val">${esc(df.fallback_rule || '')}</td></tr>
                                 <tr><td class="param-key">Best model selection</td><td class="param-val">${esc(df.best_model_selection || '')}</td></tr>
                             </tbody>
                         </table>
                         <div class="weight-bar-visual">
                             <div class="wb-track">
-                                <div class="wb-fill wb-ml" style="width:${(df.ml_weight || 0.5) * 100}%">ML ${((df.ml_weight || 0.5) * 100).toFixed(1)}%</div>
-                                <div class="wb-fill wb-dl" style="width:${(df.dl_weight || 0.5) * 100}%">DL ${((df.dl_weight || 0.5) * 100).toFixed(1)}%</div>
+                                ${Object.entries(df.per_model_weights || {}).map(([name, w], i) => {
+                                    const colors = ['wb-ml', 'wb-dl', 'wb-nb', 'wb-bilstm'];
+                                    return `<div class="wb-fill ${colors[i] || 'wb-ml'}" style="width:${(w * 100)}%">${esc(name.replace(/_/g, ' ').split(' ').map(x => x[0].toUpperCase()).join(''))} ${(w * 100).toFixed(1)}%</div>`;
+                                }).join('')}
                             </div>
                         </div>
                     </article>
@@ -300,7 +303,8 @@ function initDashboard() {
         if (!sec || !r) return;
         const isFake = r.predicted_label === "Fake News";
         const pillClass = isFake ? "status-fake" : "status-real";
-        const terms = (r.explanation.influential_terms || []);
+        const fakeTerms = (r.explanation.fake_supporting_terms || []);
+        const realTerms = (r.explanation.real_supporting_terms || []);
         const insights = (r.explanation.insights || []);
         const wfKeys = Object.keys(r.charts.word_frequency || {});
         const wfVals = Object.values(r.charts.word_frequency || {});
@@ -324,14 +328,24 @@ function initDashboard() {
 
             <div class="insight-grid">
                 <article class="sub-card">
-                    <h3>Influential keywords</h3>
+                    <h3>Words supporting <span class="status-fake-text">Fake</span> classification</h3>
                     <div class="chip-row">
-                        ${terms.length
-                            ? terms.map(t => `<span class="chip">${esc(t)}</span>`).join("")
-                            : '<span class="chip muted-chip">No standout terms identified</span>'}
+                        ${fakeTerms.length
+                            ? fakeTerms.map(t => `<span class="chip chip-fake">${esc(t)}</span>`).join("")
+                            : '<span class="chip muted-chip">No fake-supporting terms identified</span>'}
                     </div>
                 </article>
                 <article class="sub-card">
+                    <h3>Words supporting <span class="status-real-text">Real</span> classification</h3>
+                    <div class="chip-row">
+                        ${realTerms.length
+                            ? realTerms.map(t => `<span class="chip chip-real">${esc(t)}</span>`).join("")
+                            : '<span class="chip muted-chip">No real-supporting terms identified</span>'}
+                    </div>
+                </article>
+            </div>
+            <div class="insight-grid">
+                <article class="sub-card full-width-card">
                     <h3>Explainable insights</h3>
                     <ul class="clean-list">
                         ${insights.map(i => `<li>${esc(i)}</li>`).join("")}
@@ -366,6 +380,7 @@ function initDashboard() {
                                 <span class="mini-pill ${isFake ? 'status-fake' : 'status-real'}">${esc(m.prediction)}</span>
                                 <span class="tc-metric">F1 ${(m.f1_score * 100).toFixed(1)}%</span>
                                 <span class="tc-metric">Acc ${(m.accuracy * 100).toFixed(1)}%</span>
+                                <span class="tc-metric">Weight ${(m.ensemble_weight != null ? (m.ensemble_weight * 100).toFixed(1) + '%' : '—')}</span>
                             </div>
                         </div>`;
                     }).join("")}

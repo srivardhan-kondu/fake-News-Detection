@@ -408,6 +408,8 @@ a {
 }
 .wb-ml { background: var(--brand); }
 .wb-dl { background: #2a5f72; }
+.wb-nb { background: var(--success); }
+.wb-bilstm { background: #7c5cbf; }
 
 .feature-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -551,6 +553,32 @@ a {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
+}
+
+.chip-fake {
+    background: rgba(196, 73, 73, 0.12);
+    color: var(--danger);
+    border: 1px solid rgba(196, 73, 73, 0.25);
+}
+
+.chip-real {
+    background: rgba(31, 138, 112, 0.12);
+    color: var(--success);
+    border: 1px solid rgba(31, 138, 112, 0.25);
+}
+
+.status-fake-text {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+.status-real-text {
+    color: var(--success);
+    font-weight: 700;
+}
+
+.full-width-card {
+    grid-column: 1 / -1;
 }
 
 .muted-chip {

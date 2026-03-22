@@ -37,7 +37,9 @@ def export_submission_csv(report_dir: str, submission) -> str:
         writer.writerow(["Confidence Score", f"{submission.confidence_score:.2f}"])
         writer.writerow(["Credibility Score", f"{submission.credibility_score:.2f}"])
         writer.writerow(["Summary", submission.report_summary])
-        writer.writerow(["Influential Terms", ", ".join(explanation.get("influential_terms", []))])
+        writer.writerow(["Fake-Supporting Terms", ", ".join(explanation.get("fake_supporting_terms", []))])
+        writer.writerow(["Real-Supporting Terms", ", ".join(explanation.get("real_supporting_terms", []))])
+        writer.writerow(["All Influential Terms", ", ".join(explanation.get("influential_terms", []))])
         writer.writerow(["Explanation", " | ".join(explanation.get("insights", []))])
     return str(export_path)
 
@@ -58,6 +60,12 @@ def export_submission_pdf(report_dir: str, submission) -> str:
         f"Confidence Score: {submission.confidence_score:.2f}%",
         f"Credibility Score: {submission.credibility_score:.2f}%",
         f"Summary: {submission.report_summary}",
+        "",
+        "Words supporting Fake classification:",
+        f"  {', '.join(submission.explanation.get('fake_supporting_terms', [])) or 'None identified'}",
+        "Words supporting Real classification:",
+        f"  {', '.join(submission.explanation.get('real_supporting_terms', [])) or 'None identified'}",
+        "",
         "Insights:",
     ]
 

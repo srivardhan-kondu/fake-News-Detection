@@ -1,11 +1,12 @@
 import sys, json, math
-sys.path.insert(0, '.')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import joblib, numpy as np
 from app.services.preprocessing import preprocess_text
 
-artifact_dir = 'app/models_artifacts'
-vectorizer = joblib.load(f'{artifact_dir}/vectorizer.joblib')
-ml_models = joblib.load(f'{artifact_dir}/ml_models.joblib')
+artifact_dir = Path(__file__).resolve().parent.parent / 'app' / 'models_artifacts'
+vectorizer = joblib.load(artifact_dir / 'vectorizer.joblib')
+ml_models = joblib.load(artifact_dir / 'ml_models.joblib')
 
 samples = [
     (
